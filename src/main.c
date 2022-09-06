@@ -1,53 +1,39 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "server.h"
+#include "steering.h"
+
+#include <pthread.h>
+
 #include <unistd.h>
-#include <arpa/inet.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
- 
-#define PORTNUM 2300
- 
-int main(int argc, char *argv[])
-{
-    char* msg = "Hello World !\n";
-  
-    struct sockaddr_in dest; /* socket info about the machine connecting to us */
-    struct sockaddr_in serv; /* socket info about our server */
-    int mysocket;            /* socket used to listen for incoming connections */
-    socklen_t socksize = sizeof(struct sockaddr_in);
+#include <stdio.h>
 
-    memset(&serv, 0, sizeof(serv));           /* zero the struct before filling the fields */
-    serv.sin_family = AF_INET;                /* set the type of connection to TCP/IP */
-    serv.sin_addr.s_addr = htonl(INADDR_ANY); /* set our address to any interface */
-    serv.sin_port = htons(PORTNUM);           /* set the server port number */    
+int server_should_stop = 0;
+int steering_should_stop = 0;
+char* server_data;
 
-    mysocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (mysocket < 0) {
-        printf("Couldn't create socket.\n");
-        return -1;
+
+int main(int argc, char **argv) {
+
+    int server_socket = server_start();
+    if (server_socket < 0) {
+        printf("Socket failed to start.\n");
+        return -1; 
     }
-  
-    /* bind serv information to mysocket */
-    if (bind(mysocket, (struct sockaddr *)&serv, sizeof(struct sockaddr)) < 0) {
-        printf("Couldn't bind socket.\n");
-        return -1;
+    steering_start();
+
+    pthread_t server_thread, steering_thread;
+    pthread_create(&server_thread, NULL, server_listen, server_socket);
+    pthread_create(&steering_thread, NULL, steer, "hello world");
+
+    for (int i = 0; i <= 6; i++) {
+        printf("server data:\n%s\n", server_data);
+        sleep(1);
     }
 
-    printf("Listening...\n");
-    /* start listening, allowing a queue of up to 1 pending connection */
-    listen(mysocket, 1);
-    int consocket = accept(mysocket, (struct sockaddr *)&dest, &socksize);
-  
-    while(consocket)
-    {
-        printf("Incoming connection from %s - sending welcome\n", inet_ntoa(dest.sin_addr));
-        send(consocket, msg, strlen(msg), 0); 
-        close(consocket);
-        consocket = accept(mysocket, (struct sockaddr *)&dest, &socksize);
-    }
+    // server_should_stop = 1;
+    server_stop(server_socket);
+    steering_stop();
 
-    close(mysocket);
-    return EXIT_SUCCESS;
+    pthread_join(steering_thread, NULL);
+    pthread_join(server_thread, NULL);
+    
 }
