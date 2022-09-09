@@ -2,14 +2,17 @@
 #include "steering.h"
 
 #include <pthread.h>
+#include <string.h>
+#include <stdlib.h>
 
-#include <unistd.h>
+#include <unistd.h>  // sleep change to something more precise
 #include <stdio.h>
 
-int server_should_stop = 0;
-int steering_should_stop = 0;
-char* server_data;
+unsigned char server_should_stop = 0;
+unsigned char* server_data;
 
+unsigned char steering_should_stop = 0;
+steering_t movement;
 
 int main(int argc, char **argv) {
 
@@ -22,14 +25,25 @@ int main(int argc, char **argv) {
 
     pthread_t server_thread, steering_thread;
     pthread_create(&server_thread, NULL, server_listen, server_socket);
-    pthread_create(&steering_thread, NULL, steer, "hello world");
+    pthread_create(&steering_thread, NULL, steer, 0);
 
-    for (int i = 0; i <= 6; i++) {
-        printf("server data:\n%s\n", server_data);
+    for (int i = 0; i <= 500; i++) {  // mainloop
+        // printf("i: %s", server_data);
+        for (int i = 0; i < RECIEVED_DATA_MAX; i++) {
+            if (server_data[i] == 's' && i < RECIEVED_DATA_MAX - 1) {
+                movement.speed = atof(&server_data[i+1]);
+            }
+            if (server_data[i] == 'x' && i < RECIEVED_DATA_MAX - 1) {
+                movement.angle[0] = atof(&server_data[i+1]);
+            }
+            if (server_data[i] == 'y' && i < RECIEVED_DATA_MAX - 1) {
+                movement.angle[1] = atof(&server_data[i+1]);
+            }
+        }
+        memset(server_data, 0, RECIEVED_DATA_MAX);
         sleep(1);
     }
 
-    // server_should_stop = 1;
     server_stop(server_socket);
     steering_stop();
 
