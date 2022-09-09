@@ -9,8 +9,8 @@
 
 int server_start (void) {
 
-    server_data = (char*)malloc(RECIEVEC_DATA_MAX);
-    memset(server_data, 0, RECIEVEC_DATA_MAX);
+    server_data = (unsigned char*)malloc(RECIEVED_DATA_MAX);
+    memset(server_data, 0, RECIEVED_DATA_MAX);
 
     struct sockaddr_in server;
 
@@ -35,19 +35,20 @@ int server_start (void) {
 }
  
 void server_listen (int server_socket) {
-
-    struct sockaddr_in destination;
-    socklen_t destination_size = sizeof(struct sockaddr_in);
-
-    listen(server_socket, 1);
-
-    int connection_socket;
     while (!server_should_stop) {
-        connection_socket = accept(server_socket, (struct sockaddr*)&destination, &destination_size);
-        printf("Incoming connection from %s - sending welcome\n", inet_ntoa(destination.sin_addr));
-        send(connection_socket, "HELLO\n", 7, 0);
-        recv(connection_socket, server_data, RECIEVEC_DATA_MAX, 0);
+        struct sockaddr_in destination;
+        socklen_t destination_size = sizeof(struct sockaddr_in);
+
+        listen(server_socket, 0);
+        // should maybe start a new thread for each accept
+        int connection_socket = accept(server_socket, (struct sockaddr*)&destination, &destination_size);  
+        printf("Connection from %s\n", inet_ntoa(destination.sin_addr));
+        while (!server_should_stop && recv(connection_socket, server_data, RECIEVED_DATA_MAX, 0) > 0) {
+            send(connection_socket, "Hello Client!", 14, 0);
+            // sleep(1);
+        }
         close(connection_socket);
+        printf("Server listener stopped.\n");
     }
 }
 
