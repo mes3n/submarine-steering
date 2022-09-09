@@ -1,18 +1,19 @@
 #ifndef STEERING_H
 #define STEERING_H
 
+
 typedef struct {
-    float speed;
-    float angle[2];
+    double speed;
+    double angle[2];
 } steering_t;
 
-
-extern int steering_should_stop;
+extern unsigned char steering_should_stop;
+extern steering_t movement;
 
 
 void steering_start (void);
 
-void steer (steering_t movement);
+void steer (void);
 
 void steering_stop (void);
 
