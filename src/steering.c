@@ -10,8 +10,8 @@ void steering_start (void) {
 
 void steer (void) {
     while (!steering_should_stop) {
-        printf("speed: %.2f\n", movement.speed);
-        printf("%.2f, %.2f\n", movement.angle[0], movement.angle[1]);
+        printf("speed: %.5f\n", movement.speed);
+        printf("%.5f, %.5f\n", movement.angle[0], movement.angle[1]);
         sleep(1);
     }
 }

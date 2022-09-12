@@ -29,18 +29,25 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i <= 500; i++) {  // mainloop
         // printf("i: %s", server_data);
-        for (int i = 0; i < RECIEVED_DATA_MAX; i++) {
-            if (server_data[i] == 's' && i < RECIEVED_DATA_MAX - 1) {
-                movement.speed = atof(&server_data[i+1]);
-            }
-            if (server_data[i] == 'x' && i < RECIEVED_DATA_MAX - 1) {
-                movement.angle[0] = atof(&server_data[i+1]);
-            }
-            if (server_data[i] == 'y' && i < RECIEVED_DATA_MAX - 1) {
-                movement.angle[1] = atof(&server_data[i+1]);
-            }
+        // for (int i = 0; i < RECIEVED_DATA_MAX; i++) {
+        //     if (server_data[i] == 's' && i < RECIEVED_DATA_MAX - 1) {
+        //         movement.speed = atof(&server_data[i+1]);
+        //     }
+        //     if (server_data[i] == 'x' && i < RECIEVED_DATA_MAX - 1) {
+        //         movement.angle[0] = atof(&server_data[i+1]);
+        //     }
+        //     if (server_data[i] == 'y' && i < RECIEVED_DATA_MAX - 1) {
+        //         movement.angle[1] = atof(&server_data[i+1]);
+        //     }
+        // }
+        for (int i = 0; i < sizeof(movement); i++) {
+            printf("%d, ", server_data[i]);
         }
-        memset(server_data, 0, RECIEVED_DATA_MAX);
+        printf("\n");
+        // printf("sd: %s\n", server_data);
+        // printf("%f, %f, %f\n", &server_data[0], &server_data[8], &server_data[16]);
+        memcpy(&movement, server_data, sizeof(movement));
+        // memset(server_data, 0, RECIEVED_DATA_MAX);
         sleep(1);
     }
 

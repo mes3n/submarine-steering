@@ -3,8 +3,8 @@
 
 
 typedef struct {
-    double speed;
-    double angle[2];
+    float speed;
+    float angle[2];
 } steering_t;
 
 extern unsigned char steering_should_stop;
