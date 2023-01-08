@@ -45,7 +45,6 @@ void server_listen (int server_socket) {
         printf("Connection from %s\n", inet_ntoa(destination.sin_addr));
         while (!server_should_stop && recv(connection_socket, server_data, RECIEVED_DATA_MAX, 0) > 0) {
             send(connection_socket, "Hello Client!", 14, 0);
-            // sleep(1);
         }
         close(connection_socket);
         printf("Server listener stopped.\n");
