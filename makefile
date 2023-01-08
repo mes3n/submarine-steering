@@ -5,7 +5,8 @@ MYDIR = .
 SRC_DIR = $(MYDIR)/src
 OBJ_DIR = $(MYDIR)/obj
 CFLAGS = -Wall -g
-LDFLAGS = -Wall -g# link these
+LDFLAGS = -Wall -g -pthread
+LINKLIB = -lpigpio
 
 # create list of object files from source files but replace ".cpp" and "src"
 OBJ_SUBDIR = $(patsubst $(SRC_DIR)/%, $(OBJ_DIR)/%, $(wildcard $(SRC_DIR)/*/ $(SRC_DIR)/*/*/))# two levels of subdirectories
@@ -13,7 +14,7 @@ OBJ_FILES = $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(wildcard $(SRC_DIR)/*.c
 
 
 main: $(OBJ_FILES)
-	$(CC) $(LDFLAGS) -o bin/$@ $^
+	$(CC) $(LDFLAGS) -o bin/$@ $^ $(LINKLIB)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -o $@ -c $<
