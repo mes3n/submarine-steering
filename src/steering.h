@@ -11,7 +11,7 @@ extern unsigned char steering_should_stop;
 extern steering_t movement;
 
 
-void steering_start (void);
+int steering_start (void);
 
 void steer (void);
 
