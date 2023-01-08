@@ -5,7 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include <unistd.h>  // sleep change to something more precise
+#include <unistd.h>  // TODO: sleep change to something more precise
 #include <stdio.h>
 
 unsigned char server_should_stop = 0;
@@ -21,34 +21,22 @@ int main(int argc, char **argv) {
         printf("Socket failed to start.\n");
         return -1; 
     }
-    steering_start();
+    if (steering_start() < 0) {
+        printf("Steering failed initialise.\n");
+        return -1;
+    }
 
     pthread_t server_thread, steering_thread;
     pthread_create(&server_thread, NULL, server_listen, server_socket);
     pthread_create(&steering_thread, NULL, steer, 0);
 
-    for (int i = 0; i <= 500; i++) {  // mainloop
-        // printf("i: %s", server_data);
-        // for (int i = 0; i < RECIEVED_DATA_MAX; i++) {
-        //     if (server_data[i] == 's' && i < RECIEVED_DATA_MAX - 1) {
-        //         movement.speed = atof(&server_data[i+1]);
-        //     }
-        //     if (server_data[i] == 'x' && i < RECIEVED_DATA_MAX - 1) {
-        //         movement.angle[0] = atof(&server_data[i+1]);
-        //     }
-        //     if (server_data[i] == 'y' && i < RECIEVED_DATA_MAX - 1) {
-        //         movement.angle[1] = atof(&server_data[i+1]);
-        //     }
-        // }
+    for (int i = 0; i <= 10000; i++) {  // mainloop
         for (int i = 0; i < sizeof(movement); i++) {
             printf("%d, ", server_data[i]);
         }
         printf("\n");
-        // printf("sd: %s\n", server_data);
-        // printf("%f, %f, %f\n", &server_data[0], &server_data[8], &server_data[16]);
         memcpy(&movement, server_data, sizeof(movement));
-        // memset(server_data, 0, RECIEVED_DATA_MAX);
-        sleep(1);
+        usleep(10000);
     }
 
     server_stop(server_socket);
