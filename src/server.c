@@ -7,9 +7,9 @@
 #include <unistd.h>  // close, sleep
 
 
-int server_start (void) {
+int server_start(void) {
 
-    server_data = (unsigned char*)malloc(RECIEVED_DATA_MAX);
+    server_data = (char*)malloc(RECIEVED_DATA_MAX);
     memset(server_data, 0, RECIEVED_DATA_MAX);
 
     struct sockaddr_in server;
@@ -33,26 +33,32 @@ int server_start (void) {
     printf("Connection established on port %d.\n", PORTNUM);
     return server_socket;
 }
- 
-void server_listen (int server_socket) {
-    while (!server_should_stop) {
-        struct sockaddr_in destination;
-        socklen_t destination_size = sizeof(struct sockaddr_in);
 
+void server_listen(int server_socket) {
+    struct sockaddr_in destination;
+    socklen_t destination_size = sizeof(struct sockaddr_in);
+
+    while (!server_should_stop) {
         listen(server_socket, 0);
-        // should maybe start a new thread for each accept
-        int connection_socket = accept(server_socket, (struct sockaddr*)&destination, &destination_size);  
+        // should maybe start a new thread for each accept (if more than one is needed?)
+        int connection_socket = accept(server_socket, (struct sockaddr*)&destination, &destination_size);
         printf("Connection from %s\n", inet_ntoa(destination.sin_addr));
+
+        server_connected = 1;
         while (!server_should_stop && recv(connection_socket, server_data, RECIEVED_DATA_MAX, 0) > 0) {
-            send(connection_socket, "Hello Client!", 14, 0);
+            send(connection_socket, server_data, 12, 0);
+            usleep(10000);
         }
         close(connection_socket);
+        server_connected = 0;
+
         printf("Server listener stopped.\n");
     }
 }
 
-void server_stop (int server_socket) {
-    server_should_stop = 1;
+void server_stop(int server_socket) {
     shutdown(server_socket, SHUT_RDWR);
     close(server_socket);
+
+    server_should_stop = 1;
 }
