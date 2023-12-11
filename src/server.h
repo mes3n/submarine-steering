@@ -7,13 +7,17 @@
 #define PORTNUM 2300
 #define RECIEVED_DATA_MAX 128
 
-
-extern char* server_data;
 extern volatile char server_should_stop;
 extern volatile char server_connected;
 
-int server_start (void);  // create and return socket used for communication
-void server_listen (int server_socket);  // listen to the created socket
-void server_stop (int server_socket);  // close socket used for communication
+struct listen_arg {
+    int socket_fd;
+    char *recv_data;
+};
 
-#endif  // SERVER_H
+int server_start(void); // create and return socket used for communication
+// listen to the created socket
+void server_listen(struct listen_arg *args);
+void server_stop(int server_socket); // close socket used for communication
+
+#endif // SERVER_H
