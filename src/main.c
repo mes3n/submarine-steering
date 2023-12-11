@@ -1,34 +1,43 @@
-#include "server.h"
 #include "gpio.h"
+#include "server.h"
 
 #include <pthread.h>
-#include <stdlib.h>
 #include <signal.h>
+#include <stdlib.h>
 
 #include <stddef.h>
 #include <string.h>
 
-#include <unistd.h>  // TODO: sleep change to something more precise
 #include <stdio.h>
+#include <unistd.h> // TODO: sleep change to something more precise
 
-char* server_data = NULL;
-volatile char server_should_stop = 0;
-volatile char server_connected = 0;
+union data_t {
+    steering_t move;
+    char raw[RECIEVED_DATA_MAX];
+};
 
 volatile sig_atomic_t stop = 0;
-
 void sig_handle(int signum) {
-    printf("Recieved stop signal 2. Exiting...\n");
+    printf("Recieved stop signal %d. Exiting...\n", signum);
     stop = 1;
 }
 
-int main(int argc, char** argv) {
+volatile char server_should_stop = 0;
+volatile char server_connected = 0;
 
-    steering_t movement;
-    if (gpio_start(&movement) < 0) {
+int main(int argc, char **argv) {
+
+    union data_t data;
+
+#ifndef NO_PIGPIO
+    if (gpio_start() < 0) {
         printf("Gpio failed to initialise.\n");
         return -1;
     }
+#else
+    printf("Build was compiled without Gpio.\n");
+#endif
+
     int server_socket = server_start();
     if (server_socket < 0) {
         printf("Socket failed to initialise.\n");
@@ -36,40 +45,36 @@ int main(int argc, char** argv) {
     }
 
     pthread_t server_thread;
-    pthread_create(&server_thread, NULL, server_listen, server_socket);
-    
+    // struct listen_arg args =
+    pthread_create(&server_thread, NULL, (void *)server_listen,
+                   &(struct listen_arg){server_socket, data.raw});
+
     signal(SIGINT, sig_handle);
-    while (!stop) {  // mainloop
+    signal(SIGTERM, sig_handle);
+    while (!stop) { // mainloop
 
-        if (server_connected && memcmp(&movement, server_data, sizeof(steering_t)) != 0) {
+        if (server_connected) {
 
-            for (int i = 0; i < sizeof(movement); i++) {
-                printf("%d, ", server_data[i]);
-            }
-            printf("\n");
+            // for (int i = 0; i < sizeof(movement); i++) {
+            //   printf("%d, ", server_data[i]);
+            // }
+            // printf("\n");
 
-            // MMMMMMM WE LOVE MEMORY SAFETY
-            if (memcmp(&movement.speed, &server_data[offsetof(steering_t, speed)], sizeof(movement.speed)) != 0) {  // spped was changed
-                
-            }
-            if (memcmp(&movement.steerx, &server_data[offsetof(steering_t, steerx)], sizeof(movement.steerx)) != 0) {  // anglex was changed
-                set_servo_rotation(GPIO_STEER_X, movement.steerx);
-                set_servo_rotation(GPIO_STEER_X, movement.steerx);
-            }
-            if (memcmp(&movement.steery, &server_data[offsetof(steering_t, steery)], sizeof(movement.steery)) != 0) {  // angley was changed
-                
-            }
+#ifndef NO_PIGPIO
+            set_servo_rotation(GPIO_STEER_X, data.move.steerx);
+            set_servo_rotation(GPIO_STEER_X, data.move.steerx);
+#endif
 
-            memcpy(&movement, server_data, sizeof(movement));
-
-            printf("speed: %.5f\n", movement.speed);
-            printf("%.5f, %.5f\n", movement.steerx, movement.steery);
+            printf("speed: %.5f\n", data.move.speed);
+            printf("%.5f, %.5f\n", data.move.steerx, data.move.steery);
         }
 
         usleep(10 * 1000);
     }
 
+#ifndef NO_PIGPIO
     gpio_stop();
+#endif
 
     server_stop(server_socket);
     pthread_join(server_thread, NULL);
