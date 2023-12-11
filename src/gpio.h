@@ -11,7 +11,7 @@
 
 #define GPIO_STEER_X 17
 
-int gpio_start(steering_t* movement);
+int gpio_start();
 void set_servo_rotation(int pin, float scale);
 void gpio_stop(void);
 
