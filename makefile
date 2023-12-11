@@ -1,38 +1,30 @@
-# Variables to control Makefile operation
+.PHONY: header all clean file_tree run
+
+CC_FLAGS = -Wall -g
+LD_FLAGS = -Wall -g -pthread -lpigpio
 
 CC = gcc
-MYDIR = .
-SRC_DIR = $(MYDIR)/src
-OBJ_DIR = $(MYDIR)/obj
-CFLAGS = -Wall -g
-LDFLAGS = -Wall -g -pthread
-LINKLIB = -lpigpio
+OBJ = $(shell find src -name '*.c' | sed -e 's/\.c/\.o/' -e 's/src/obj/')
 
-# create list of object files from source files but replace ".cpp" and "src"
-OBJ_SUBDIR = $(patsubst $(SRC_DIR)/%, $(OBJ_DIR)/%, $(wildcard $(SRC_DIR)/*/ $(SRC_DIR)/*/*/))# two levels of subdirectories
-OBJ_FILES = $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(wildcard $(SRC_DIR)/*.c $(SRC_DIR)/*/*.c $(SRC_DIR)/*/*/*.c))
+obj/%.o: src/%.c
+	$(CC) -c $< -o $@ $(CC_FLAGS)
 
+main: file_tree $(OBJ)
+	$(CC) $(OBJ) -o bin/main $(LD_FLAGS)
 
-main: $(OBJ_FILES)
-	$(CC) $(LDFLAGS) -o bin/$@ $^ $(LINKLIB)
+no_gpio: CC_FLAGS += -DNO_PIGPIO
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
-	$(CC) $(CFLAGS) -o $@ -c $<
+no_gpio: file_tree $(OBJ)
+	$(CC) $(OBJ) -o bin/main $(filter-out -lpigpio,$(LDFLAGS))
 
-all: clean main
-
-run: main
-	@echo ""
-	exec $(MYDIR)/bin/main
-
-
-header: HEADER_NAME = $(subst .,_,$(shell echo $(lastword $(subst /, ,$(FILE))) | tr '[:lower:]' '[:upper:]'))
-		SOURCE_FILE = $(subst .h,.c,$(FILE))
+header: HEADER_NAME = $(shell basename $(FILE) | tr a-z A-Z | sed 's/\./_/')
+	SRC_FILE = $(shell echo $(FILE) | sed 's/\.h/\.c/')
 
 header: 
+ifdef FILE
 ifeq ("$(wildcard $(FILE))", "")
 	@touch $(FILE) 
-	@touch $(SOURCE_FILE)
+	@touch $(SRC_FILE)
 	@echo '#ifndef $(HEADER_NAME)' >> $(FILE)
 	@echo '#define $(HEADER_NAME)' >> $(FILE)
 	@echo '' >> $(FILE)
@@ -40,16 +32,23 @@ ifeq ("$(wildcard $(FILE))", "")
 	@echo '' >> $(FILE)
 	@echo '#endif  // $(HEADER_NAME)' >> $(FILE)
 
-	@echo "Created c header file ($(FILE)) with header guard ($(HEADER_NAME)) and source file ($(SOURCE_FILE))."
-	git add $(FILE) $(SOURCE_FILE)
-
+	@echo "Created c header file ($(FILE)) with header guard ($(HEADER_NAME)) and source file ($(SRC_FILE))."
+	git add $(FILE) $(SRC_FILE)
 else
 	@echo "Header file already exists."
-
+endif
+else
+	@echo "Please specify a header file name."
 endif
 
+run:
+	./bin/main
 
-.PHONY: clean
+all: clean tree main
+
+file_tree:
+	mkdir -p bin $(shell find src -type d | sed 's/src/obj/g')
+
 clean:
 	rm -rf bin obj
-	mkdir bin obj $(OBJ_SUBDIR)
+
