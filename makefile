@@ -44,7 +44,7 @@ endif
 run:
 	./bin/main
 
-all: clean tree main
+all: clean file_tree main
 
 file_tree:
 	mkdir -p bin $(shell find src -type d | sed 's/src/obj/g')
