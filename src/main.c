@@ -1,3 +1,4 @@
+#include "config.h"
 #include "gpio.h"
 #include "server.h"
 
@@ -27,8 +28,18 @@ volatile char server_connected = 0;
 
 int main(int argc, char **argv) {
 
-    union data_t data;
+    struct Config config;
+    if (read_from("main.conf", &config, 1) < 0) {
+        printf("Failed to read from config.\n");
+        return -1;
+    }
+    printf("Running with:\n"
+           "\tport = %d\n"
+           "\thandshake_recv = %s\n"
+           "\thandshake_send = %s\n",
+           config.port, config.handshake_send, config.handshake_recv);
 
+    union data_t data;
 #ifndef NO_PIGPIO
     if (gpio_start() < 0) {
         printf("Gpio failed to initialise.\n");
@@ -38,7 +49,7 @@ int main(int argc, char **argv) {
     printf("Build was compiled without Gpio.\n");
 #endif
 
-    int server_socket = server_start();
+    int server_socket = server_start(config.port);
     if (server_socket < 0) {
         printf("Socket failed to initialise.\n");
         return -1;

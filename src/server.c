@@ -1,22 +1,19 @@
 #include "server.h"
+#include "config.h"
 
 #include <stdio.h>
 #include <string.h>
 
 #include <unistd.h> // close, sleep
 
-#define HANDSHAKE_RECV "MayIDr1ve"
-#define HANDSHAKE_SEND "YesYouMay"
-#define HANDSHAKE_LEN 9
-
-int server_start(void) {
+int server_start(int portnum) {
     struct sockaddr_in server;
 
     memset(&server, 0, sizeof(server));
     server.sin_family = AF_INET;
     server.sin_addr.s_addr =
         htonl(INADDR_ANY);            // set our address to any interface
-    server.sin_port = htons(PORTNUM); // set the server port number
+    server.sin_port = htons(portnum); // set the server port number
 
     int server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket < 0) {
@@ -30,7 +27,7 @@ int server_start(void) {
         sleep(3); // wait n seconds before trying again
     }
 
-    printf("Connection established on port %d.\n", PORTNUM);
+    printf("Connection established on port %d.\n", portnum);
     return server_socket;
 }
 
@@ -49,11 +46,11 @@ void server_listen(struct listen_arg *args) {
         if (!(recv(conn_sock, args->recv_data, RECIEVED_DATA_MAX, 0) > 0)) {
             goto close_conn;
         }
-        if (strncmp(args->recv_data, HANDSHAKE_RECV, HANDSHAKE_LEN) != 0) { // Recieved handshake fails
-            // send(conn_sock, "FAIL", 4, 0);
+        if (strncmp(args->recv_data, args->handshake_recv, RECIEVED_DATA_MAX) !=
+            0) { // Recieved handshake fails
             goto close_conn;
         } else { // Recieved handshake accepted -> Send one back
-            send(conn_sock, HANDSHAKE_SEND, HANDSHAKE_LEN, 0);
+            send(conn_sock, args->handshake_send, HANDSHAKE_MAX, 0);
         }
 
         memset(args->recv_data, 0, RECIEVED_DATA_MAX);
