@@ -17,13 +17,13 @@ int server_start(int portnum) {
 
     int server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket < 0) {
-        printf("Couldn't start socket.\n");
+        fprintf(stderr, "Couldn't start socket.\n");
         return -1;
     }
 
     while (bind(server_socket, (struct sockaddr *)&server,
                 sizeof(struct sockaddr)) < 0) {
-        printf("Couldn't bind socket, trying again in 3 seconds.\n");
+        fprintf(stderr, "Couldn't bind socket, trying again in 3 seconds.\n");
         sleep(3); // wait n seconds before trying again
     }
 
@@ -43,11 +43,14 @@ void server_listen(struct listen_arg *args) {
                                &destination_size);
         printf("Connection from %s\n", inet_ntoa(destination.sin_addr));
 
-        if (!(recv(conn_sock, args->recv_data, RECIEVED_DATA_MAX, 0) > 0)) {
+        if (recv(conn_sock, args->recv_data, RECIEVED_DATA_MAX, 0) < 0) {
+            fprintf(stderr, "Could not recieve data.\n");
             goto close_conn;
         }
         if (strncmp(args->recv_data, args->handshake_recv, RECIEVED_DATA_MAX) !=
             0) { // Recieved handshake fails
+            fprintf(stderr, "Handshake failed. %s and %s don't match.\n",
+                   args->recv_data, args->handshake_recv);
             goto close_conn;
         } else { // Recieved handshake accepted -> Send one back
             send(conn_sock, args->handshake_send, HANDSHAKE_MAX, 0);
@@ -65,7 +68,7 @@ void server_listen(struct listen_arg *args) {
 
     close_conn:
         close(conn_sock);
-        printf("Server listener stopped.\n");
+        printf("Server connection stopped.\n");
     }
 }
 

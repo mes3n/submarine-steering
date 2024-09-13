@@ -5,22 +5,6 @@
 
 #define CHAR_PER_LINE 128
 
-#define DEFAULT_port 2300
-#define DEFAULT_handshake_recv ""
-#define DEFAULT_handshake_send ""
-
-#define FIELD_N_port 1
-#define FIELD_N_handshake_recv 2
-#define FIELD_N_handshake_send 3
-
-#define FORMAT_port "d"
-#define FORMAT_handshake_recv "s"
-#define FORMAT_handshake_send "s"
-
-#define IS_PTR_port 0
-#define IS_PTR_handshake_recv 1
-#define IS_PTR_handshake_send 1
-
 #define __eval__(...) __eval1024__(__VA_ARGS__)
 #define __eval1024__(...) __eval512__(__eval512__(__VA_ARGS__))
 #define __eval512__(...) __eval256__(__eval256__(__VA_ARGS__))

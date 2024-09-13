@@ -10,7 +10,7 @@
 #include <string.h>
 
 #include <stdio.h>
-#include <unistd.h> // TODO: sleep change to something more precise
+#include <unistd.h>
 
 union data_t {
     steering_t move;
@@ -19,7 +19,7 @@ union data_t {
 
 volatile sig_atomic_t stop = 0;
 void sig_handle(int signum) {
-    printf("Recieved stop signal %d. Exiting...\n", signum);
+    fprintf(stderr, "Recieved stop signal %d. Exiting...\n", signum);
     stop = 1;
 }
 
@@ -29,36 +29,38 @@ volatile char server_connected = 0;
 int main(int argc, char **argv) {
 
     struct Config config;
-    if (read_from("main.conf", &config, 1) < 0) {
-        printf("Failed to read from config.\n");
+    if (read_from("conf.d/main.conf", &config, 1) < 0) {
+        fprintf(stderr, "Failed to read from config.\n");
         return -1;
     }
-    printf("Running with:\n"
-           "\tport = %d\n"
-           "\thandshake_recv = %s\n"
-           "\thandshake_send = %s\n",
-           config.port, config.handshake_send, config.handshake_recv);
+    fprintf(stderr,
+            "Running with:\n"
+            "\tport = %d\n"
+            "\thandshake_recv = %s\n"
+            "\thandshake_send = %s\n",
+            config.port, config.handshake_send, config.handshake_recv);
 
     union data_t data;
 #ifndef NO_PIGPIO
     if (gpio_start() < 0) {
-        printf("Gpio failed to initialise.\n");
+        fprintf(stderr, "Gpio failed to initialise.\n");
         return -1;
     }
 #else
-    printf("Build was compiled without Gpio.\n");
+    fprintf(stderr, "Build was compiled without Gpio.\n");
 #endif
 
     int server_socket = server_start(config.port);
     if (server_socket < 0) {
-        printf("Socket failed to initialise.\n");
+        fprintf(stderr, "Socket failed to initialise.\n");
         return -1;
     }
 
     pthread_t server_thread;
-    // struct listen_arg args =
     pthread_create(&server_thread, NULL, (void *)server_listen,
-                   &(struct listen_arg){server_socket, data.raw});
+                   &(struct listen_arg){server_socket, data.raw,
+                                        config.handshake_recv,
+                                        config.handshake_send});
 
     signal(SIGINT, sig_handle);
     signal(SIGTERM, sig_handle);
