@@ -1,8 +1,6 @@
 #ifndef SERVO_H
 #define SERVO_H
 
-#include "steering.h"
-
 #define MIN_WIDTH 500
 #define MID_WIDTH 1500
 #define MAX_WIDTH 2500

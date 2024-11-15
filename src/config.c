@@ -62,7 +62,7 @@
         }                                                                      \
     }
 
-int scan_line(char *line, struct Config *config) {
+int scan_line(char *line, struct config_t *config) {
     __eval__(__map__(__set_var__, port, handshake_recv, handshake_send));
 
     return 0;
@@ -84,7 +84,7 @@ void remove_comment(char *line) {
 
 #define __zero_var__(var) memset(config->var, 0, sizeof(config->var));
 
-int read_from(char *path, struct Config *config, int else_use_default) {
+int read_from(char *path, struct config_t *config, int else_use_default) {
     FILE *fp;
     if ((fp = fopen(path, "r")) == NULL) {
         return -1;

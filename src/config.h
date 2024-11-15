@@ -18,7 +18,7 @@
 #define FORMAT_handshake_send "s"
 #define IS_PTR_handshake_send 1
 
-struct Config {
+struct config_t {
     unsigned fields;
 
     int port;
@@ -26,6 +26,6 @@ struct Config {
     char handshake_send[HANDSHAKE_MAX];
 };
 
-int read_from(char *path, struct Config *config, int else_use_default);
+int read_from(char *path, struct config_t *config, int else_use_default);
 
 #endif // CONFIG_H

@@ -2,26 +2,31 @@
 #define SERVER_H
 
 #include <arpa/inet.h>
+#include <stdbool.h>
 #include <sys/socket.h>
 
 #define RECIEVED_DATA_MAX 128
 
-extern volatile char server_should_stop;
-extern volatile char server_connected;
-
-struct listen_arg {
-    int socket_fd;
+struct listen_args_t {
     char *recv_data;
 
     char *handshake_recv;
     char *handshake_send;
 };
 
+struct server_thread_t {
+    int socket_fd;
+    pthread_t handle;
+
+    bool should_stop;
+    bool connected;
+
+    struct listen_args_t args;
+};
+
 // create and return socket used for communication
-int server_start(int portnum);
-// listen to the created socket
-void server_listen(struct listen_arg *args);
+int server_start(int port, struct server_thread_t **server_thread);
 // close socket used for communication
-void server_stop(int server_socket);
+void server_stop(struct server_thread_t *server_thread);
 
 #endif // SERVER_H

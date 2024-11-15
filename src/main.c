@@ -7,90 +7,71 @@
 #include <stdlib.h>
 
 #include <stddef.h>
-#include <string.h>
 
 #include <stdio.h>
 #include <unistd.h>
 
 union data_t {
-    steering_t move;
+    struct {
+        float speed;
+        float steerx;
+        float steery;
+    } move;
     char raw[RECIEVED_DATA_MAX];
 };
 
 volatile sig_atomic_t stop = 0;
 void sig_handle(int signum) {
+    stop++;
     fprintf(stderr, "Recieved stop signal %d. Exiting...\n", signum);
-    stop = 1;
+    if (stop > 1) {
+        fprintf(stderr, "Recieved %d stop signals. Forcing exit...\n", stop);
+        exit(stop);
+    }
 }
 
-volatile char server_should_stop = 0;
-volatile char server_connected = 0;
-
 int main(int argc, char **argv) {
-
-    struct Config config;
-    if (read_from("conf.d/main.conf", &config, 1) < 0) {
+    struct config_t config;
+    if (read_from("main.conf", &config, 1) < 0) {
         fprintf(stderr, "Failed to read from config.\n");
         return -1;
     }
-    fprintf(stderr,
-            "Running with:\n"
-            "\tport = %d\n"
-            "\thandshake_recv = %s\n"
-            "\thandshake_send = %s\n",
-            config.port, config.handshake_send, config.handshake_recv);
+    fprintf(stderr, "Running with:\n");
+    fprintf(stderr, "  - port = %d\n", config.port);
+    fprintf(stderr, "  - handshake_recv = %s\n", config.handshake_recv);
+    fprintf(stderr, "  - handshake_send = %s\n", config.handshake_send);
 
-    union data_t data;
-#ifndef NO_PIGPIO
     if (gpio_start() < 0) {
-        fprintf(stderr, "Gpio failed to initialise.\n");
+        fprintf(stderr, "GPIO failed to initialise.\n");
         return -1;
     }
-#else
-    fprintf(stderr, "Build was compiled without Gpio.\n");
-#endif
 
-    int server_socket = server_start(config.port);
-    if (server_socket < 0) {
+    signal(SIGINT, sig_handle);
+    signal(SIGTERM, sig_handle);
+
+    union data_t data;
+    struct server_thread_t *server_thread;
+    server_thread = malloc(sizeof(struct server_thread_t));
+    server_thread->args.recv_data = data.raw;
+    server_thread->args.handshake_recv = config.handshake_recv;
+    server_thread->args.handshake_send = config.handshake_send;
+    server_start(config.port, &server_thread);
+    if (server_thread->socket_fd < 0) {
         fprintf(stderr, "Socket failed to initialise.\n");
         return -1;
     }
 
-    pthread_t server_thread;
-    pthread_create(&server_thread, NULL, (void *)server_listen,
-                   &(struct listen_arg){server_socket, data.raw,
-                                        config.handshake_recv,
-                                        config.handshake_send});
-
-    signal(SIGINT, sig_handle);
-    signal(SIGTERM, sig_handle);
     while (!stop) { // mainloop
-
-        if (server_connected) {
-
-            // for (int i = 0; i < sizeof(movement); i++) {
-            //   printf("%d, ", server_data[i]);
-            // }
-            // printf("\n");
-
-#ifndef NO_PIGPIO
+        if (server_thread->connected) {
             set_servo_rotation(GPIO_STEER_X, data.move.steerx);
-            set_servo_rotation(GPIO_STEER_X, data.move.steerx);
-#endif
-
-            printf("speed: %.5f\n", data.move.speed);
-            printf("%.5f, %.5f\n", data.move.steerx, data.move.steery);
+            fprintf(stderr, "\rspeed: %.5f - steer: %.5f, %.5f", data.move.speed,
+                   data.move.steerx, data.move.steery);
         }
-
         usleep(10 * 1000);
     }
 
-#ifndef NO_PIGPIO
     gpio_stop();
-#endif
-
-    server_stop(server_socket);
-    pthread_join(server_thread, NULL);
+    server_stop(server_thread);
 
     return 0;
 }

@@ -14,9 +14,9 @@ without an GPIO interface.
 
 Most relevant settings can be configured through `main.conf`, the current available settings are:
 
-| *key* | *type* | *default* |
-| --- | --- | --- |
-| port | `int` | 2300 |
+| *key*          | *type*  | *default* |
+| -------------- | ------- | --------- |
+| port           | `int`   | 2300      |
 | handshake_recv | `char*` | MayIDr1ve |
 | handshake_send | `char*` | YesYouMay |
 
