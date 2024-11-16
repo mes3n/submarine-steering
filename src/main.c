@@ -2,14 +2,11 @@
 #include "gpio.h"
 #include "server.h"
 
-#include <pthread.h>
 #include <signal.h>
 #include <stdlib.h>
-
-#include <stddef.h>
+#include <unistd.h>
 
 #include <stdio.h>
-#include <unistd.h>
 
 union data_t {
     struct {
@@ -31,11 +28,25 @@ void sig_handle(int signum) {
 }
 
 int main(int argc, char **argv) {
+    char opt, *config_file = "/etc/steering.conf";
+    while ((opt = getopt(argc, argv, "c:h")) != -1) {
+        switch (opt) {
+        case 'c':
+            config_file = optarg;
+            break;
+        case 'h':
+        default:
+            fprintf(stderr, "Usage: %s [-h] [-c FILE]\n", argv[0]);
+            return -1;
+        }
+    }
+
     struct config_t config;
-    if (read_from("main.conf", &config, 1) < 0) {
+    if (read_from(config_file, &config, 1) < 0) {
         fprintf(stderr, "Failed to read from config.\n");
         return -1;
     }
+
     fprintf(stderr, "Running with:\n");
     fprintf(stderr, "  - port = %d\n", config.port);
     fprintf(stderr, "  - handshake_recv = %s\n", config.handshake_recv);
@@ -64,8 +75,8 @@ int main(int argc, char **argv) {
     while (!stop) { // mainloop
         if (server_thread->connected) {
             set_servo_rotation(GPIO_STEER_X, data.move.steerx);
-            fprintf(stderr, "\rspeed: %.5f - steer: %.5f, %.5f", data.move.speed,
-                   data.move.steerx, data.move.steery);
+            fprintf(stderr, "\rspeed: %.5f - steer: %.5f, %.5f",
+                    data.move.speed, data.move.steerx, data.move.steery);
         }
         usleep(10 * 1000);
     }
