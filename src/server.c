@@ -49,9 +49,7 @@ void server_listen(struct server_thread_t *server_thread) {
     }
 }
 
-int server_start(int port, struct server_thread_t **server_thread) {
-    (*server_thread)->should_stop = false;
-
+int server_start(int port, struct server_thread_t *server_thread) {
     struct sockaddr_in server;
     memset(&server, 0, sizeof(server));
     server.sin_family = AF_INET;
@@ -78,11 +76,12 @@ int server_start(int port, struct server_thread_t **server_thread) {
         i++;
     }
 
-    (*server_thread)->socket_fd = fd;
+    server_thread->socket_fd = fd;
     printf("Connection established on port %d.\n", port);
 
-    if (pthread_create(&((*server_thread)->handle), NULL, (void *)server_listen,
-                       server_thread) < 0) {
+    server_thread->should_stop = false;
+    if (pthread_create(&(server_thread->handle), NULL, (void *)server_listen,
+                       server_thread) != 0) {
         fprintf(stderr, "Failed to start server listener.\n");
         close(fd);
         return -1;

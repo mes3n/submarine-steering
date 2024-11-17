@@ -25,7 +25,7 @@ struct server_thread_t {
 };
 
 // create and return socket used for communication
-int server_start(int port, struct server_thread_t **server_thread);
+int server_start(int port, struct server_thread_t *server_thread);
 // close socket used for communication
 void server_stop(struct server_thread_t *server_thread);
 

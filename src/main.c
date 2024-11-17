@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
             break;
         case 'h':
         default:
-            fprintf(stderr, "Usage: %s [-h] [-c FILE]\n", argv[0]);
+            fprintf(stderr, "Usage: %s [-h] [-c CONFIG]\n", argv[0]);
             return -1;
         }
     }
@@ -61,19 +61,17 @@ int main(int argc, char **argv) {
     signal(SIGTERM, sig_handle);
 
     union data_t data;
-    struct server_thread_t *server_thread;
-    server_thread = malloc(sizeof(struct server_thread_t));
-    server_thread->args.recv_data = data.raw;
-    server_thread->args.handshake_recv = config.handshake_recv;
-    server_thread->args.handshake_send = config.handshake_send;
-    server_start(config.port, &server_thread);
-    if (server_thread->socket_fd < 0) {
-        fprintf(stderr, "Socket failed to initialise.\n");
+    struct server_thread_t server_thread;
+    server_thread.args.recv_data = data.raw;
+    server_thread.args.handshake_recv = config.handshake_recv;
+    server_thread.args.handshake_send = config.handshake_send;
+    if (server_start(config.port, &server_thread) < 0) {
+        fprintf(stderr, "Server failed to initialise.\n");
         return -1;
     }
 
     while (!stop) { // mainloop
-        if (server_thread->connected) {
+        if (server_thread.connected) {
             set_servo_rotation(GPIO_STEER_X, data.move.steerx);
             fprintf(stderr, "\rspeed: %.5f - steer: %.5f, %.5f",
                     data.move.speed, data.move.steerx, data.move.steery);
@@ -82,7 +80,7 @@ int main(int argc, char **argv) {
     }
 
     gpio_stop();
-    server_stop(server_thread);
+    server_stop(&server_thread);
 
     return 0;
 }
