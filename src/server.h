@@ -2,6 +2,7 @@
 #define SERVER_H
 
 #include <arpa/inet.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <sys/socket.h>
 
@@ -18,8 +19,8 @@ struct server_thread_t {
     int socket_fd;
     pthread_t handle;
 
-    bool should_stop;
-    bool connected;
+    atomic_bool should_stop;
+    atomic_bool connected;
 
     struct listen_args_t args;
 };

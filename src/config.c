@@ -53,20 +53,25 @@
         __defer2__(_map)()(m, __VA_ARGS__))()
 
 #define __str__(s) #s
+#define __is_custom__(var) (config->fields & (0x1 << FIELD_N_##var))
 #define __set_var__(var)                                                       \
     {                                                                          \
-        if (sscanf(line, " " __str__(var) " = %" FORMAT_##var " ",             \
-                   __if_else__(IS_PTR_##var)()(&)config->var) == 1) {          \
-            config->fields |= 0x1 << FIELD_N_##var;                            \
-            return 1;                                                          \
+        if (!__is_custom__(var)) {                                             \
+            if (sscanf(buf, " " __str__(var) " = %" FORMAT_##var " ",          \
+                       __if_else__(IS_PTR_##var)()(&)config->var) == 1) {      \
+                config->fields |= 0x1 << FIELD_N_##var;                        \
+            }                                                                  \
         }                                                                      \
     }
+#define __default_var__(var)                                                   \
+    if (!__is_custom__(var)) {                                                 \
+        __if_else__(IS_PTR_##var)(                                             \
+            strncpy(config->var, DEFAULT_##var, sizeof(config->var) - 1))(     \
+            config->var = DEFAULT_##var);                                      \
+        config->fields |= 0x1 << FIELD_N_##var;                                \
+    }
 
-int scan_line(char *line, struct config_t *config) {
-    __eval__(__map__(__set_var__, port, handshake_recv, handshake_send));
-
-    return 0;
-}
+int scan_line(char *line, struct config_t *config) { return 0; }
 
 void remove_comment(char *line) {
     char *c = memchr(line, '#', CHAR_PER_LINE);
@@ -74,40 +79,34 @@ void remove_comment(char *line) {
         memset(c, 0, CHAR_PER_LINE - (c - line));
 }
 
-#define __is_custom__(var) (config->fields & (0x1 << FIELD_N_##var))
-#define __default_var__(var)                                                   \
-    if (!__is_custom__(var)) {                                                 \
-        __if_else__(IS_PTR_##var)(                                             \
-            strncpy(config->var, DEFAULT_##var, sizeof(config->var) - 1))(     \
-            config->var = DEFAULT_##var);                                      \
-    }
-
 #define __zero_var__(var) memset(config->var, 0, sizeof(config->var));
 
-int read_from(char *path, struct config_t *config, int else_use_default) {
+int reset_config(struct config_t *config) {
+    config->fields = 0x0;
+    __eval__(__map__(__zero_var__, handshake_recv, handshake_send));
+    return 0;
+}
+
+int read_from(char *path, struct config_t *config, bool use_default) {
     FILE *fp;
     if ((fp = fopen(path, "r")) == NULL) {
         return -1;
     }
-
-    config->fields = 0x0;
-    __eval__(__map__(__zero_var__, handshake_recv, handshake_send));
 
     char buf[CHAR_PER_LINE];
     while (fgets(buf, CHAR_PER_LINE, fp)) {
         remove_comment(buf);
         if (sscanf(buf, " %*s") == EOF)
             continue;
-        if (scan_line(buf, config))
-            continue;
-        printf("err: %s", buf);
+        __eval__(__map__(__set_var__, port, handshake_recv, handshake_send,
+                         steer_x_pin, steer_y_pin, motor_ctrl_pin));
     }
 
     fclose(fp);
 
-    if (else_use_default) {
-        __eval__(
-            __map__(__default_var__, port, handshake_recv, handshake_send));
+    if (use_default) {
+        __eval__(__map__(__default_var__, port, handshake_recv, handshake_send,
+                         steer_x_pin, steer_y_pin, motor_ctrl_pin));
     }
 
     return 0;

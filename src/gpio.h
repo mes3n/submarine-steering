@@ -1,16 +1,17 @@
-#ifndef SERVO_H
-#define SERVO_H
+#ifndef GPIO_H
+#define GPIO_H
 
-#define MIN_WIDTH 500
-#define MID_WIDTH 1500
-#define MAX_WIDTH 2500
+// These values as the micro second intervals for which the
+// servo will react. Toggle on/off at these intervals for the
+// servo turn turn to its min, mid, and max position.
+#define SERVO_MIN 500
+#define SERVO_MID 1500
+#define SERVO_MAX 2500
 
-#define SERVO_RANGE (MAX_WIDTH - MIN_WIDTH)
+#include <stddef.h>
 
-#define GPIO_STEER_X 17
-
-int gpio_start();
+int gpio_start(const unsigned int *offsets, size_t num_offsets);
 void set_servo_rotation(int pin, float scale);
 void gpio_stop(void);
 
-#endif  // SERVO_H
+#endif // GPIO_H
