@@ -4,7 +4,9 @@ Sockets based communication with the submarine's GPIO pins.
 
 ## Setup
 
-This project uses Pigpio for interfacing with the GPIO pins on the Raspberry Pi. Install with:
+This can be built using Pigpio for interfacing with the GPIO pins on the
+Raspberry Pi. Install with:
+
 ```bash
 sudo apt install pigpio
 ```
@@ -12,15 +14,21 @@ sudo apt install pigpio
 If the Pigpio library is unavailable it is possible to compile the project
 without an GPIO interface.
 
-Most relevant settings can be configured through `main.conf`, the current available settings are:
+Most relevant settings can be configured through `main.conf`, the current
+available settings are:
 
 | *key*          | *type*  | *default* |
 | -------------- | ------- | --------- |
 | port           | `int`   | 2300      |
 | handshake_recv | `char*` | MayIDr1ve |
 | handshake_send | `char*` | YesYouMay |
+| steer_x_pin    | `int`   | 2         |
+| steer_y_pin    | `int`   | 3         |
+| motor_ctrl_pin | `int`   | 4         |
 
-The syntax supports comments `#` but requires `=` between key value pairs. Configured as such:
+The syntax supports comments `#` but requires `=` between key value pairs.
+Configured as such:
+
 ```conf
 key = value  # Whitespaces are optional
 foo=bar#abc  # Also valid
@@ -31,16 +39,31 @@ foo=bar#abc  # Also valid
 The project uses a makefile for simpler compilation.
 
 The code can be compiled normally with:
+
 ```bash
 make
 ```
 
-The code can also be compiled without Pigpio by running:
+Other options can be configured using `CONFIG_*` variables set either in the
+shell or using a `.config` file.
+
+The code can be compiled without Pigpio by running:
+
 ```bash
-make no_gpio
+echo CONFIG_BUILD_PIGPIO=y > .config
+make
+```
+
+It is also possible to build using *libgpiod* after installing the proper
+headers and configuring its build option.
+
+```bash
+echo CONFIG_BUILD_LIBGPIOD=y > .config
+make
 ```
 
 A complete rebuild can be done with:
+
 ```bash
 make all
 ```
@@ -48,24 +71,27 @@ make all
 ## Execution
 
 After compiling the code the project can simply be run with:
+
 ```bash
-make run
+./bin/steering
 ```
 
-This will start a server on `port` that makes a handshake with the new connection
-using `handshake_recv` and `handshake_send`. If this succeeds the server starts using
-the recieved data for steering the submarine.
+This will start a server on `port` that makes a handshake with the new
+connection using `handshake_recv` and `handshake_send`. If this succeeds the
+server starts using the recieved data for steering the submarine.
 
 ## Forking
 
-Most of the server code is pretty standard as there are only minimal changes to the
-standard method of configuring a network socket in C.
+Most of the server code is pretty standard as there are only minimal changes to
+the standard method of configuring a network socket in C.
 
-So far the GPIO interface is also pretty simple altough it might be expanded upon along
-with implementing support for motor control.
+So far the GPIO interface is also pretty simple altough it might be expanded
+upon along with implementing support for motor control.
 
-The configuration files are less straightforward. In order to simplify the process
-of modifying fields, some macros have been utilized. Adding a new field requires the following changes:
+The configuration files are less straightforward. In order to simplify the
+process of modifying fields, some macros have been utilized. Adding a new field
+requires the following changes:
+
 ```c
 // src/config.h
 
@@ -97,6 +123,3 @@ int scan_line(char *line, struct Config *config) {
     }
 // ...
 ```
-
-______
-_Alternative Names:_ submarine-core*, submarine-mainframe*, submarine-central, submarine-server

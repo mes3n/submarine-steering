@@ -30,7 +30,7 @@
 #define FORMAT_steer_y_pin "d"
 #define IS_PTR_steer_y_pin 0
 
-#define DEFAULT_motor_ctrl_pin 23
+#define DEFAULT_motor_ctrl_pin 4
 #define FIELD_N_motor_ctrl_pin 5
 #define FORMAT_motor_ctrl_pin "d"
 #define IS_PTR_motor_ctrl_pin 0
