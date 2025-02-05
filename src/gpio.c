@@ -1,4 +1,7 @@
 #include "gpio.h"
+
+#include <cinttypes>
+#include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -65,7 +68,7 @@ close_chip:
     gpiod_chip_close(chip);
     return exit_status;
 #else
-    fprintf(stderr, "Build was compiled without Gpio.\n");
+    fprintf(stderr, "Build was compiled without GPIO support.\n");
 #endif
     return 0;
 }
@@ -86,10 +89,51 @@ void set_servo_rotation(const int pin, const float scale) {
         SERVO_MID + (int)((SERVO_MAX - SERVO_MIN) / 20 * rounded);
     // Toggle on off with SERVO_* micro second interval
     // to turn the servo to min, mid, or max.
-    printf("%d -> %d\n", rounded, rotation);
     gpiod_line_request_set_value(line_req, pin, GPIOD_LINE_VALUE_ACTIVE);
     usleep(rotation);
     gpiod_line_request_set_value(line_req, pin, GPIOD_LINE_VALUE_INACTIVE);
+#endif
+}
+
+volatile sig_atomic_t stage = 0;
+void next_stage(int signum) {
+    fprintf(stderr, "Recieved signal... Starting next stage.\n");
+    stage++;
+}
+
+void calibrate_esc(int pin) {
+#ifdef BUILD_PIGPIO
+#elif defined(BUILD_LIBGPIOD)
+    signal(SIGINT, next_stage);
+    fprintf(stderr, "Start sending MAXIMUM signals to ESC.\n");
+    while (stage == 0) {
+        gpiod_line_request_set_value(line_req, pin, GPIOD_LINE_VALUE_ACTIVE);
+        usleep(ESC_MAX);
+        gpiod_line_request_set_value(line_req, pin, GPIOD_LINE_VALUE_INACTIVE);
+        usleep(ESC_PWM - ESC_MAX);
+    }
+    fprintf(stderr, "Start sending MINIMUM signals to ESC.\n");
+    while (stage == 1) {
+        gpiod_line_request_set_value(line_req, pin, GPIOD_LINE_VALUE_ACTIVE);
+        usleep(ESC_MIN);
+        gpiod_line_request_set_value(line_req, pin, GPIOD_LINE_VALUE_INACTIVE);
+        usleep(ESC_PWM - ESC_MIN);
+    }
+    fprintf(stderr, "ESC is configured. Listen for affermative beeps.\n");
+#endif
+}
+
+void set_motor_speed(const int pin, const float scale) {
+#ifdef BUILD_PIGPIO
+#elif defined(BUILD_LIBGPIOD)
+    if (scale < 0.0f)
+        return;
+    const int speed = (int)(ESC_MIN + (ESC_MAX - ESC_MIN) * scale);
+    printf("speed: %d\n", speed);
+    gpiod_line_request_set_value(line_req, pin, GPIOD_LINE_VALUE_ACTIVE);
+    usleep(speed);
+    gpiod_line_request_set_value(line_req, pin, GPIOD_LINE_VALUE_INACTIVE);
+    usleep(ESC_PWM - speed);
 #endif
 }
 

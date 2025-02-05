@@ -4,11 +4,10 @@
 
 #include <signal.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-#include <stdio.h>
 
 static const char *help_message =
     "Usage: %s [-c CONFIG_FILE] [-h] ...\nSimple program to which comminucates "
@@ -23,7 +22,9 @@ static const char *help_message =
     "  -S HANDSHAKE_SEND  handshake string program will respond with\n"
     "  -x STEER_X_PIN     the gpio pin used to control horizontal movement\n"
     "  -y STEER_Y_PIN     the gpio pin used to control vertical movement\n"
-    "  -m MOTOR_CTRL_PIN  the gpio pin used to control motor speed\n";
+    "  -m MOTOR_CTRL_PIN  the gpio pin used to control motor speed\n"
+    "  -E                 start the interactive ESC configuration using ^C\n"
+    "  -h                 view this help menu\n";
 
 union data_t {
     struct {
@@ -45,9 +46,10 @@ void sig_handle(int signum) {
 
 int main(int argc, char **argv) {
     char opt, *config_file = "/etc/steering.conf";
+    bool configure_esc = false;
     struct config_t config;
     reset_config(&config);
-    while ((opt = getopt(argc, argv, "hc:p:R:S:x:y:m:")) != (char)0xff) {
+    while ((opt = getopt(argc, argv, "Ehc:p:R:S:x:y:m:")) != (char)0xff) {
         switch (opt) {
         case 'c':
             config_file = optarg;
@@ -81,6 +83,10 @@ int main(int argc, char **argv) {
         case 'h':
             fprintf(stderr, help_message, argv[0], config_file);
             return 0;
+        case 'E':
+            fprintf(stderr, "Will calibrate ESC then exit...\n");
+            configure_esc = true;
+            break;
         }
     }
 
@@ -97,10 +103,16 @@ int main(int argc, char **argv) {
     fprintf(stderr, "  - steer_y_pin = %d\n", config.steer_y_pin);
     fprintf(stderr, "  - motor_ctrl_pin = %d\n", config.motor_ctrl_pin);
 
-    const unsigned int offsets[] = {config.steer_x_pin, config.steer_y_pin};
+    const unsigned int offsets[] = {config.steer_x_pin, config.steer_y_pin,
+                                    config.motor_ctrl_pin};
     if (gpio_start(offsets, sizeof(offsets) / sizeof(offsets[0])) < 0) {
         fprintf(stderr, "GPIO failed to initialise.\n");
         return -1;
+    }
+
+    if (configure_esc) {
+        calibrate_esc(config.motor_ctrl_pin);
+        return 0;
     }
 
     signal(SIGINT, sig_handle);
@@ -120,6 +132,7 @@ int main(int argc, char **argv) {
         if (server_thread.connected) {
             set_servo_rotation(config.steer_x_pin, data.move.steerx);
             set_servo_rotation(config.steer_y_pin, data.move.steery);
+            set_motor_speed(config.motor_ctrl_pin, data.move.speed);
             fprintf(stderr, "speed: %.5f - steer: %.5f, %.5f\n",
                     data.move.speed, data.move.steerx, data.move.steery);
         }
