@@ -1,57 +1,92 @@
 #include "server.h"
 #include "config.h"
 
+#include <fcntl.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/poll.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
-#include <pthread.h>
-
-#include <unistd.h> // close, sleep
-
-void server_listen(struct server_thread_t *server_thread) {
-    struct sockaddr_in destination;
-    socklen_t destination_size = sizeof(struct sockaddr_in);
-    char handshake_buf[HANDSHAKE_MAX] = {0};
-
-    const struct listen_args_t *args = &server_thread->args;
+void *server_listen(struct server_thread_t *server_thread) {
     while (!server_thread->should_stop) {
-        listen(server_thread->socket_fd, 0);
-        int conn;
-        if ((conn = accept(server_thread->socket_fd,
-                           (struct sockaddr *)&destination,
-                           &destination_size)) < 0) {
+        const struct listen_args_t *args = &server_thread->args;
+        char handshake_buf[HANDSHAKE_MAX] = {0};
+        struct pollfd pfd = {0};
+
+        pfd.fd = server_thread->socket_fd;
+        pfd.events = POLLIN;
+        for (int rc = 0; rc == 0; rc = poll(&pfd, 1, 1000)) {
+            if (server_thread->should_stop) {
+                fprintf(stderr, "Stopping server thread.\n");
+                pthread_exit(NULL);
+            }
+            if (rc < 0) {
+                fprintf(stderr, "Failed to poll listener socket.\n");
+                pthread_exit(NULL);
+            }
+        }
+
+        if ((pfd.fd = accept(server_thread->socket_fd, NULL, NULL)) < 0) {
             fprintf(stderr, "Could not accept connection.\n");
-            goto close_conn;
+            continue;
         }
-        printf("Connection from %s\n", inet_ntoa(destination.sin_addr));
+        fprintf(stderr, "Received connection request.\n");
 
-        if (recv(conn, handshake_buf, HANDSHAKE_MAX, 0) < 0) {
-            fprintf(stderr, "Could not recieve data.\n");
-            goto close_conn;
+        fcntl(pfd.fd, F_SETFL, fcntl(pfd.fd, F_GETFL) | O_NONBLOCK);
+
+        pfd.events = POLLIN | POLLHUP;
+        while (!server_thread->should_stop) {
+            int rc = poll(&pfd, 1, 1000);
+            if (rc == 0)
+                continue;
+            if (rc < 0) {
+                fprintf(stderr, "Failed to poll connection socket.\n");
+                break;
+            }
+            if (pfd.revents & POLLHUP)
+                break;
+            if (!server_thread->connected) {
+                int n = recv(pfd.fd, handshake_buf, HANDSHAKE_MAX, 0);
+                if (n <= 0) {
+                    if (n < 0)
+                        fprintf(stderr, "Could not recieve data.\n");
+                    break;
+                }
+                if (strncmp(handshake_buf, args->handshake_recv, n) != 0) {
+                    fprintf(stderr,
+                            "Handshake failed. '%s' and '%s' don't match.\n",
+                            handshake_buf, args->handshake_recv);
+                    break;
+                }
+                // Recieved handshake accepted -> Send one back
+                send(pfd.fd, args->handshake_send, HANDSHAKE_MAX, 0);
+                server_thread->connected = true;
+
+                fprintf(stderr, "Client connected.\n");
+                continue;
+            }
+            pthread_mutex_lock(args->data_mtx);
+            memset(args->recv_data, 0x0, RECIEVED_DATA_MAX);
+            int n = recv(pfd.fd, args->recv_data, RECIEVED_DATA_MAX, 0);
+            if (n <= 0) {
+                if (n < 0)
+                    fprintf(stderr, "Could not recieve data.\n");
+                pthread_mutex_unlock(args->data_mtx);
+                break;
+            }
+            send(pfd.fd, args->recv_data, RECIEVED_DATA_MAX, 0);
+            pthread_mutex_unlock(args->data_mtx);
+            pthread_cond_signal(args->data_cond);
         }
-        if (strncmp(handshake_buf, args->handshake_recv, HANDSHAKE_MAX) !=
-            0) { // Recieved handshake fails
-            fprintf(stderr, "Handshake failed. '%s' and '%s' don't match.\n",
-                    handshake_buf, args->handshake_recv);
-            goto close_conn;
-        } else { // Recieved handshake accepted -> Send one back
-            send(conn, args->handshake_send, HANDSHAKE_MAX, 0);
-        }
 
-        memset(args->recv_data, 0x0, RECIEVED_DATA_MAX);
-
-        server_thread->connected = 1;
-        while (!server_thread->should_stop &&
-               recv(conn, args->recv_data, RECIEVED_DATA_MAX, 0) > 0) {
-            send(conn, args->recv_data, RECIEVED_DATA_MAX, 0);
-            usleep(10 * 1000);
-        }
-        server_thread->connected = 0;
-
-    close_conn:
-        close(conn);
+        server_thread->connected = false;
+        shutdown(pfd.fd, SHUT_RDWR);
+        close(pfd.fd);
         printf("Server connection stopped.\n");
     }
+    pthread_exit(NULL);
 }
 
 int server_start(int port, struct server_thread_t *server_thread) {
@@ -62,9 +97,14 @@ int server_start(int port, struct server_thread_t *server_thread) {
     server.sin_addr.s_addr = htonl(INADDR_ANY);
     server.sin_port = htons(port);
 
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if (fd < 0) {
         fprintf(stderr, "Couldn't create socket.\n");
+        return -1;
+    }
+
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0) {
+        fprintf(stderr, "Failed to set socket options.\n");
         return -1;
     }
 
@@ -74,9 +114,16 @@ int server_start(int port, struct server_thread_t *server_thread) {
         return -1;
     }
 
+    if (listen(fd, 0) < 0) {
+        fprintf(stderr, "Couldn't listen on socket.\n");
+        close(fd);
+        return -1;
+    }
+
     server_thread->socket_fd = fd;
     printf("Connection established on port %d.\n", port);
 
+    server_thread->connected = false;
     server_thread->should_stop = false;
     if (pthread_create(&(server_thread->handle), NULL, (void *)server_listen,
                        server_thread) != 0) {
@@ -90,7 +137,7 @@ int server_start(int port, struct server_thread_t *server_thread) {
 
 void server_stop(struct server_thread_t *server_thread) {
     server_thread->should_stop = true;
+    pthread_join(server_thread->handle, NULL);
     shutdown(server_thread->socket_fd, SHUT_RDWR);
     close(server_thread->socket_fd);
-    pthread_join(server_thread->handle, NULL);
 }

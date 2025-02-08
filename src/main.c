@@ -2,6 +2,7 @@
 #include "gpio.h"
 #include "server.h"
 
+#include <pthread.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -10,7 +11,7 @@
 #include <unistd.h>
 
 static const char *help_message =
-    "Usage: %s [-c CONFIG_FILE] [-h] ...\nSimple program to which comminucates "
+    "Usage: %s [-c CONFIG_FILE] [-h] ...\nSimple program to which communicates "
     "with gpio pins based on information transferred through a basic socket "
     "protocol.\nEvery value has a default and can otherwise be set from a "
     "specified config file (defaul: %s) or command line arguments (which are "
@@ -23,15 +24,17 @@ static const char *help_message =
     "  -x STEER_X_PIN     the gpio pin used to control horizontal movement\n"
     "  -y STEER_Y_PIN     the gpio pin used to control vertical movement\n"
     "  -m MOTOR_CTRL_PIN  the gpio pin used to control motor speed\n"
-    "  -E                 start the interactive ESC configuration using ^C\n"
     "  -h                 view this help menu\n";
 
 union data_t {
     struct {
-        float speed;
-        float steerx;
-        float steery;
-    } move;
+        char fn;
+        char padding[3];
+        union fn_var_t {
+            float rotation;
+            float speed;
+        } var;
+    } cmd;
     char raw[RECIEVED_DATA_MAX];
 };
 
@@ -46,10 +49,9 @@ void sig_handle(int signum) {
 
 int main(int argc, char **argv) {
     char opt, *config_file = "/etc/steering.conf";
-    bool configure_esc = false;
     struct config_t config;
     reset_config(&config);
-    while ((opt = getopt(argc, argv, "Ehc:p:R:S:x:y:m:")) != (char)0xff) {
+    while ((opt = getopt(argc, argv, "hc:p:R:S:x:y:m:")) != (char)0xff) {
         switch (opt) {
         case 'c':
             config_file = optarg;
@@ -83,16 +85,15 @@ int main(int argc, char **argv) {
         case 'h':
             fprintf(stderr, help_message, argv[0], config_file);
             return 0;
-        case 'E':
-            fprintf(stderr, "Will calibrate ESC then exit...\n");
-            configure_esc = true;
-            break;
+        default:
+            fprintf(stderr, help_message, argv[0], config_file);
+            return 1;
         }
     }
 
     if (read_from(config_file, &config, true) < 0) {
         fprintf(stderr, "Failed to read from config.\n");
-        return -1;
+        return 1;
     }
 
     fprintf(stderr, "Running with:\n");
@@ -103,44 +104,97 @@ int main(int argc, char **argv) {
     fprintf(stderr, "  - steer_y_pin = %d\n", config.steer_y_pin);
     fprintf(stderr, "  - motor_ctrl_pin = %d\n", config.motor_ctrl_pin);
 
-    const unsigned int offsets[] = {config.steer_x_pin, config.steer_y_pin,
-                                    config.motor_ctrl_pin};
-    if (gpio_start(offsets, sizeof(offsets) / sizeof(offsets[0])) < 0) {
-        fprintf(stderr, "GPIO failed to initialise.\n");
-        return -1;
-    }
+    struct {
+        struct gpio_pin_t steer_x;
+        struct gpio_pin_t steer_y;
+        struct gpio_pin_t motor_ctrl;
+    } gpios;
 
-    if (configure_esc) {
-        calibrate_esc(config.motor_ctrl_pin);
-        return 0;
+    gpios.steer_x.pin = config.steer_x_pin;
+    gpios.steer_x.pwm = 0;
+    gpios.steer_x.min = 500;
+    gpios.steer_x.max = 2500;
+    gpios.steer_x.new_value = 1500;
+    gpios.steer_x.sensitivity = 100;
+
+    gpios.steer_y.pin = config.steer_y_pin;
+    gpios.steer_y.pwm = 0;
+    gpios.steer_y.min = 500;
+    gpios.steer_y.max = 2500;
+    gpios.steer_y.new_value = 1500;
+    gpios.steer_y.sensitivity = 100;
+
+    gpios.motor_ctrl.pin = config.motor_ctrl_pin;
+    gpios.motor_ctrl.pwm = 20000;
+    gpios.motor_ctrl.min = 1000;
+    gpios.motor_ctrl.max = 2000;
+    gpios.motor_ctrl.new_value = 1000;
+    gpios.motor_ctrl.sensitivity = 50;
+
+    if (gpio_start((struct gpio_pin_t *)&gpios, 3) < 0) {
+        fprintf(stderr, "GPIO failed to initialise.\n");
+        return 2;
     }
 
     signal(SIGINT, sig_handle);
     signal(SIGTERM, sig_handle);
 
     union data_t data = {0};
-    struct server_thread_t server_thread;
-    server_thread.args.recv_data = data.raw;
-    server_thread.args.handshake_recv = config.handshake_recv;
-    server_thread.args.handshake_send = config.handshake_send;
+    pthread_mutex_t data_mtx = PTHREAD_MUTEX_INITIALIZER;
+    pthread_cond_t data_cond = PTHREAD_COND_INITIALIZER;
+    struct server_thread_t server_thread = {
+        .args = {
+            .recv_data = data.raw,
+            .data_mtx = &data_mtx,
+            .data_cond = &data_cond,
+            .handshake_recv = config.handshake_recv,
+            .handshake_send = config.handshake_send,
+        }};
     if (server_start(config.port, &server_thread) < 0) {
         fprintf(stderr, "Server failed to initialise.\n");
-        return -1;
+        return 3;
     }
 
     while (!stop) { // mainloop
-        if (server_thread.connected) {
-            set_servo_rotation(config.steer_x_pin, data.move.steerx);
-            set_servo_rotation(config.steer_y_pin, data.move.steery);
-            set_motor_speed(config.motor_ctrl_pin, data.move.speed);
-            fprintf(stderr, "speed: %.5f - steer: %.5f, %.5f\n",
-                    data.move.speed, data.move.steerx, data.move.steery);
+        pthread_mutex_lock(&data_mtx);
+        for (;;) {
+            if (stop)
+                goto exit;
+            struct timespec ts;
+            clock_gettime(CLOCK_REALTIME, &ts);
+            ts.tv_sec += 1;
+            int rc = pthread_cond_timedwait(&data_cond, &data_mtx, &ts);
+            if (rc == 0)
+                break;
         }
-        usleep(100 * 1000);
+
+        char fn = data.cmd.fn;
+        data.cmd.fn = 0x0;
+        union fn_var_t var = data.cmd.var;
+
+        pthread_mutex_unlock(&data_mtx);
+
+        switch (fn) {
+        case 'x':
+            set_gpio_from_scale(&gpios.steer_x, var.rotation);
+            break;
+        case 'y':
+            set_gpio_from_scale(&gpios.steer_y, var.rotation);
+            break;
+        case 'm':
+            set_gpio_from_scale(&gpios.motor_ctrl, (var.speed - 0.5f) * 2.f);
+            break;
+        default:
+            break;
+        }
     }
 
-    gpio_stop();
+exit:
+    gpio_stop((struct gpio_pin_t *)&gpios, 3);
     server_stop(&server_thread);
+
+    pthread_mutex_destroy(&data_mtx);
+    pthread_cond_destroy(&data_cond);
 
     return 0;
 }

@@ -10,6 +10,8 @@
 
 struct listen_args_t {
     char *recv_data;
+    pthread_mutex_t *data_mtx;
+    pthread_cond_t *data_cond;
 
     char *handshake_recv;
     char *handshake_send;

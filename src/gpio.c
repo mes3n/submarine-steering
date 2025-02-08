@@ -1,8 +1,9 @@
 #include "gpio.h"
 
-#include <cinttypes>
-#include <signal.h>
+#include <pthread.h>
+#include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 #ifdef BUILD_PIGPIO
@@ -13,7 +14,39 @@ const char *gpiochip = "/dev/gpiochip1";
 struct gpiod_line_request *line_req = NULL;
 #endif
 
-int gpio_start(const unsigned int *offsets, size_t num_offsets) {
+#define diff(a, b) (a > b ? a - b : b - a)
+
+void *set_gpio_val(struct gpio_pin_t *pin) {
+    fprintf(stderr, "GPIO thread %d: started.\n", pin->pin);
+    while (!pin->should_stop) {
+        volatile unsigned int new = pin->new_value;
+        if (diff(pin->_current_value, new) >= pin->sensitivity) {
+            pin->_current_value = new;
+        } else if (pin->pwm == 0) {
+            usleep(1000);
+            continue;
+        }
+#ifdef BUILD_PIGPIO
+        usleep(pin->_current_value);
+#elif defined(BUILD_LIBGPIOD)
+        gpiod_line_request_set_value(line_req, pin->pin,
+                                     GPIOD_LINE_VALUE_ACTIVE);
+        usleep(pin->_current_value);
+        gpiod_line_request_set_value(line_req, pin->pin,
+                                     GPIOD_LINE_VALUE_INACTIVE);
+#else
+        usleep(pin->_current_value);
+#endif
+        usleep(pin->pwm > pin->_current_value ? pin->pwm - pin->_current_value
+                                              : 0);
+    }
+    fprintf(stderr, "GPIO thread %d: stopped.\n", pin->pin);
+    pthread_exit(NULL);
+}
+
+int gpio_start(struct gpio_pin_t *pins, size_t num_pins) {
+    int exit_status = 0;
+
 #ifdef BUILD_PIGPIO
     gpioCfgInterfaces(PI_DISABLE_SOCK_IF | PI_DISABLE_FIFO_IF |
                       PI_LOCALHOST_SOCK_IF);
@@ -23,8 +56,6 @@ int gpio_start(const unsigned int *offsets, size_t num_offsets) {
         return -1;
     }
 #elif defined(BUILD_LIBGPIOD)
-    int exit_status = 0;
-
     struct gpiod_chip *chip = gpiod_chip_open(gpiochip);
     if (!chip) {
         fprintf(stderr, "Failed to open chip at %s.\n", gpiochip);
@@ -47,7 +78,11 @@ int gpio_start(const unsigned int *offsets, size_t num_offsets) {
         goto free_settings;
     }
 
-    if (gpiod_line_config_add_line_settings(line_cfg, offsets, num_offsets,
+    unsigned int *offsets = malloc(sizeof(unsigned int) * num_pins);
+    for (int i = 0; i < num_pins; i++) {
+        offsets[i] = pins[i].pin;
+    }
+    if (gpiod_line_config_add_line_settings(line_cfg, offsets, num_pins,
                                             settings) < 0) {
         fprintf(stderr, "Failed to apply line settings.\n");
         exit_status = -1;
@@ -61,86 +96,45 @@ int gpio_start(const unsigned int *offsets, size_t num_offsets) {
     }
 
 free_line_cfg:
+    free(offsets);
     gpiod_line_config_free(line_cfg);
 free_settings:
     gpiod_line_settings_free(settings);
 close_chip:
     gpiod_chip_close(chip);
-    return exit_status;
 #else
     fprintf(stderr, "Build was compiled without GPIO support.\n");
 #endif
-    return 0;
-}
 
-void set_servo_rotation(const int pin, const float scale) {
-#ifdef BUILD_PIGPIO
-    int rotation = MID_WIDTH + (SERVO_RANGE * 0.5 * scale);
-
-    if (rotation < MIN_WIDTH)
-        rotation = MIN_WIDTH;
-    if (rotation > MAX_WIDTH)
-        rotation = MAX_WIDTH;
-
-    gpioServo(pin, rotation);
-#elif defined(BUILD_LIBGPIOD)
-    const int rounded = (int)(10.0f * scale + 0.5f);
-    const int rotation =
-        SERVO_MID + (int)((SERVO_MAX - SERVO_MIN) / 20 * rounded);
-    // Toggle on off with SERVO_* micro second interval
-    // to turn the servo to min, mid, or max.
-    gpiod_line_request_set_value(line_req, pin, GPIOD_LINE_VALUE_ACTIVE);
-    usleep(rotation);
-    gpiod_line_request_set_value(line_req, pin, GPIOD_LINE_VALUE_INACTIVE);
-#endif
-}
-
-volatile sig_atomic_t stage = 0;
-void next_stage(int signum) {
-    fprintf(stderr, "Recieved signal... Starting next stage.\n");
-    stage++;
-}
-
-void calibrate_esc(int pin) {
-#ifdef BUILD_PIGPIO
-#elif defined(BUILD_LIBGPIOD)
-    signal(SIGINT, next_stage);
-    fprintf(stderr, "Start sending MAXIMUM signals to ESC.\n");
-    while (stage == 0) {
-        gpiod_line_request_set_value(line_req, pin, GPIOD_LINE_VALUE_ACTIVE);
-        usleep(ESC_MAX);
-        gpiod_line_request_set_value(line_req, pin, GPIOD_LINE_VALUE_INACTIVE);
-        usleep(ESC_PWM - ESC_MAX);
+    for (int i = 0; i < num_pins; i++) {
+        pins[i].should_stop = false;
+        pins[i]._current_value = pins[i].new_value;
+        pthread_mutex_init(&(pins[i].mtx), NULL);
+        pthread_create(&(pins[i].handle), NULL, (void *)set_gpio_val,
+                       &(pins[i]));
     }
-    fprintf(stderr, "Start sending MINIMUM signals to ESC.\n");
-    while (stage == 1) {
-        gpiod_line_request_set_value(line_req, pin, GPIOD_LINE_VALUE_ACTIVE);
-        usleep(ESC_MIN);
-        gpiod_line_request_set_value(line_req, pin, GPIOD_LINE_VALUE_INACTIVE);
-        usleep(ESC_PWM - ESC_MIN);
-    }
-    fprintf(stderr, "ESC is configured. Listen for affermative beeps.\n");
-#endif
+
+    return exit_status;
 }
 
-void set_motor_speed(const int pin, const float scale) {
-#ifdef BUILD_PIGPIO
-#elif defined(BUILD_LIBGPIOD)
-    if (scale < 0.0f)
-        return;
-    const int speed = (int)(ESC_MIN + (ESC_MAX - ESC_MIN) * scale);
-    printf("speed: %d\n", speed);
-    gpiod_line_request_set_value(line_req, pin, GPIOD_LINE_VALUE_ACTIVE);
-    usleep(speed);
-    gpiod_line_request_set_value(line_req, pin, GPIOD_LINE_VALUE_INACTIVE);
-    usleep(ESC_PWM - speed);
-#endif
+void set_gpio_from_scale(struct gpio_pin_t *pin, const float scale) {
+    volatile unsigned int new =
+        pin->min + (pin->max - pin->min) * (scale * 0.5f + 0.5f);
+    new = new < pin->min ? pin->min : new;
+    new = new > pin->max ? pin->max : new;
+    pin->new_value = new;
 }
 
-void gpio_stop(void) {
+void gpio_stop(struct gpio_pin_t *pins, size_t num_pins) {
 #ifdef BUILD_PIGPIO
     gpioTerminate();
 #elif defined(BUILD_LIBGPIOD)
     gpiod_line_request_release(line_req);
 #endif
+    for (int i = 0; i < num_pins; i++) {
+        pins[i].should_stop = true;
+    }
+    for (int i = 0; i < num_pins; i++) {
+        pthread_join(pins[i].handle, NULL);
+    }
 }

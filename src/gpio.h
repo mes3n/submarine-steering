@@ -1,28 +1,24 @@
 #ifndef GPIO_H
 #define GPIO_H
 
-// These values as the micro second intervals for which the
-// servo will react. Toggle on/off at these intervals for the
-// servo turn turn to its min, mid, and max position.
-#define SERVO_MIN 500
-#define SERVO_MID 1500
-#define SERVO_MAX 2500
+#include <pthread.h>
+#include <stdatomic.h>
 
-#define ESC_PWM 20000
-#define ESC_MIN 1000
-#define ESC_MAX 2000
+struct gpio_pin_t {
+    unsigned int pin;
+    unsigned int pwm;
+    unsigned int min;
+    unsigned int max;
+    atomic_uint new_value;
+    unsigned int _current_value;
+    unsigned int sensitivity;
+    pthread_mutex_t mtx;
+    atomic_bool should_stop;
+    pthread_t handle;
+};
 
-#include <stddef.h>
-
-typedef struct {
-    int pwm;
-    int pin;
-} gpio_pin_t;
-
-int gpio_start(const unsigned int *offsets, size_t num_offsets);
-void set_servo_rotation(int pin, float scale);
-void calibrate_esc(int pin);
-void set_motor_speed(int pin, float scale);
-void gpio_stop(void);
+int gpio_start(struct gpio_pin_t *pins, size_t num_pins);
+void set_gpio_from_scale(struct gpio_pin_t *pin, const float scale);
+void gpio_stop(struct gpio_pin_t *pins, size_t num_pins);
 
 #endif // GPIO_H

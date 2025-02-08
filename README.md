@@ -63,13 +63,6 @@ gpioset -t 2ms,18ms P8_10=1  # Wait some time after powering ESC (ca 5s)
 gpioset -t 1ms,19ms P8_10=1  # Wait some time (ca 5s)
 ```
 
-The application also has built in support for this. Run the binary with `-E` and
-go through the MAXIMUM then MINIMUM stage by pressing `^C`.
-
-```bash
-./bin/steering -E
-```
-
 ### libgpiod
 
 The current implementation is mostly tailored towards the `libgpiod` library.
