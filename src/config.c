@@ -71,8 +71,7 @@
         config->fields |= 0x1 << FIELD_N_##var;                                \
     }
 
-int scan_line(char *line, struct config_t *config) { return 0; }
-
+// Fill everything following '#' with '\0' inclusively
 void remove_comment(char *line) {
     char *c = memchr(line, '#', CHAR_PER_LINE);
     if (c != NULL)
@@ -81,10 +80,9 @@ void remove_comment(char *line) {
 
 #define __zero_var__(var) memset(config->var, 0, sizeof(config->var));
 
-int reset_config(struct config_t *config) {
+void reset_config(struct config_t *config) {
     config->fields = 0x0;
     __eval__(__map__(__zero_var__, handshake_recv, handshake_send));
-    return 0;
 }
 
 int read_from(char *path, struct config_t *config, bool use_default) {

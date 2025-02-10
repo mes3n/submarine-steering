@@ -35,7 +35,11 @@
 #define FORMAT_motor_ctrl_pin "d"
 #define IS_PTR_motor_ctrl_pin 0
 
+/**
+ * Struct containing application configuration
+ */
 struct config_t {
+    /// Used to mark which fields have been set using bits
     unsigned fields;
 
     int port;
@@ -47,8 +51,21 @@ struct config_t {
     int motor_ctrl_pin;
 };
 
+/**
+ * Load configuration from a configuration file
+ *
+ * @param path A string describing the path of the configuration file
+ * @param config A pointer to a config_t object to load configuration into
+ * @param use_default Load hard coded default values if none other were set
+ * @returns Returns an integer 0 for success otherwise negative
+ */
 int read_from(char *path, struct config_t *config, bool use_default);
 
-int reset_config(struct config_t *config);
+/**
+ * Reset configuration struct object be zeroing its fields
+ *
+ * @params config A pointer to a config_t object to be reset
+ */
+void reset_config(struct config_t *config);
 
 #endif // CONFIG_H

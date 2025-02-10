@@ -135,10 +135,7 @@ server starts using the received data for steering the submarine.
 
 ## Forking
 
-Most of the server code is pretty standard as there are only minimal changes to
-the standard method of configuring a network socket in C.
-
-The configuration files are less straightforward. In order to simplify the
+The configuration files are a somewhat convoluted mess. In order to simplify the
 process of modifying fields, some macros have been utilized. Adding a new field
 will require defining some variables.
 

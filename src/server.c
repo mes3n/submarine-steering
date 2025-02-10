@@ -1,6 +1,7 @@
 #include "server.h"
 #include "config.h"
 
+#include <arpa/inet.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -9,6 +10,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+// A function which manages client connections and passes on their data
 void *server_listen(struct server_thread_t *server_thread) {
     while (!server_thread->should_stop) {
         const struct listen_args_t *args = &server_thread->args;
@@ -67,18 +69,18 @@ void *server_listen(struct server_thread_t *server_thread) {
                 fprintf(stderr, "Client connected.\n");
                 continue;
             }
-            pthread_mutex_lock(args->data_mtx);
+            pthread_mutex_lock(&server_thread->data_mtx);
             memset(args->recv_data, 0x0, RECIEVED_DATA_MAX);
             int n = recv(pfd.fd, args->recv_data, RECIEVED_DATA_MAX, 0);
             if (n <= 0) {
                 if (n < 0)
                     fprintf(stderr, "Could not recieve data.\n");
-                pthread_mutex_unlock(args->data_mtx);
+                pthread_mutex_unlock(&server_thread->data_mtx);
                 break;
             }
             send(pfd.fd, args->recv_data, RECIEVED_DATA_MAX, 0);
-            pthread_mutex_unlock(args->data_mtx);
-            pthread_cond_signal(args->data_cond);
+            pthread_mutex_unlock(&server_thread->data_mtx);
+            pthread_cond_signal(&server_thread->data_cond);
         }
 
         server_thread->connected = false;
@@ -89,7 +91,7 @@ void *server_listen(struct server_thread_t *server_thread) {
     pthread_exit(NULL);
 }
 
-int server_start(int port, struct server_thread_t *server_thread) {
+int server_start(struct server_thread_t *server_thread, int port) {
     struct sockaddr_in server;
     memset(&server, 0, sizeof(server));
     server.sin_family = AF_INET;
@@ -120,6 +122,9 @@ int server_start(int port, struct server_thread_t *server_thread) {
         return -1;
     }
 
+    pthread_mutex_init(&server_thread->data_mtx, NULL);
+    pthread_cond_init(&server_thread->data_cond, NULL);
+
     server_thread->socket_fd = fd;
     printf("Connection established on port %d.\n", port);
 
@@ -136,7 +141,10 @@ int server_start(int port, struct server_thread_t *server_thread) {
 }
 
 void server_stop(struct server_thread_t *server_thread) {
+    pthread_mutex_destroy(&server_thread->data_mtx);
+    pthread_cond_destroy(&server_thread->data_cond);
     server_thread->should_stop = true;
+
     pthread_join(server_thread->handle, NULL);
     shutdown(server_thread->socket_fd, SHUT_RDWR);
     close(server_thread->socket_fd);

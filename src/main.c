@@ -26,6 +26,7 @@ static const char *help_message =
     "  -m MOTOR_CTRL_PIN  the gpio pin used to control motor speed\n"
     "  -h                 view this help menu\n";
 
+// Union used to receive raw data
 union data_t {
     struct {
         char fn;
@@ -140,39 +141,36 @@ int main(int argc, char **argv) {
     signal(SIGTERM, sig_handle);
 
     union data_t data = {0};
-    pthread_mutex_t data_mtx = PTHREAD_MUTEX_INITIALIZER;
-    pthread_cond_t data_cond = PTHREAD_COND_INITIALIZER;
     struct server_thread_t server_thread = {
         .args = {
             .recv_data = data.raw,
-            .data_mtx = &data_mtx,
-            .data_cond = &data_cond,
             .handshake_recv = config.handshake_recv,
             .handshake_send = config.handshake_send,
         }};
-    if (server_start(config.port, &server_thread) < 0) {
+    if (server_start(&server_thread, config.port) < 0) {
         fprintf(stderr, "Server failed to initialise.\n");
         return 3;
     }
 
-    while (!stop) { // mainloop
-        pthread_mutex_lock(&data_mtx);
+    while (!stop) {
+        pthread_mutex_lock(&server_thread.data_mtx);
         for (;;) {
             if (stop)
                 goto exit;
             struct timespec ts;
             clock_gettime(CLOCK_REALTIME, &ts);
             ts.tv_sec += 1;
-            int rc = pthread_cond_timedwait(&data_cond, &data_mtx, &ts);
+            int rc = pthread_cond_timedwait(&server_thread.data_cond,
+                                            &server_thread.data_mtx, &ts);
             if (rc == 0)
                 break;
         }
 
         char fn = data.cmd.fn;
-        data.cmd.fn = 0x0;
         union fn_var_t var = data.cmd.var;
+        data.cmd.fn = 0x0;
 
-        pthread_mutex_unlock(&data_mtx);
+        pthread_mutex_unlock(&server_thread.data_mtx);
 
         switch (fn) {
         case 'x':
@@ -192,9 +190,6 @@ int main(int argc, char **argv) {
 exit:
     gpio_stop((struct gpio_pin_t *)&gpios, 3);
     server_stop(&server_thread);
-
-    pthread_mutex_destroy(&data_mtx);
-    pthread_cond_destroy(&data_cond);
 
     return 0;
 }

@@ -16,12 +16,15 @@ struct gpiod_line_request *line_req = NULL;
 
 #define diff(a, b) (a > b ? a - b : b - a)
 
+// A function which manages the gpio outputs from a pin object
 void *set_gpio_val(struct gpio_pin_t *pin) {
     fprintf(stderr, "GPIO thread %d: started.\n", pin->pin);
-    while (!pin->should_stop) {
-        volatile unsigned int new = pin->new_value;
-        if (diff(pin->_current_value, new) >= pin->sensitivity) {
+    while (!pin->_should_stop) {
+        unsigned int new = pin->new_value;
+        if (pin->min <= new && new <= pin->max &&
+            diff(pin->_current_value, new) >= pin->sensitivity) {
             pin->_current_value = new;
+            fprintf(stderr, "GPIO thread %d: new value %d.\n", pin->pin, new);
         } else if (pin->pwm == 0) {
             usleep(1000);
             continue;
@@ -107,11 +110,9 @@ close_chip:
 #endif
 
     for (int i = 0; i < num_pins; i++) {
-        pins[i].should_stop = false;
+        pins[i]._should_stop = false;
         pins[i]._current_value = pins[i].new_value;
-        pthread_mutex_init(&(pins[i].mtx), NULL);
-        pthread_create(&(pins[i].handle), NULL, (void *)set_gpio_val,
-                       &(pins[i]));
+        pthread_create(&pins[i]._handle, NULL, (void *)set_gpio_val, &pins[i]);
     }
 
     return exit_status;
@@ -132,9 +133,9 @@ void gpio_stop(struct gpio_pin_t *pins, size_t num_pins) {
     gpiod_line_request_release(line_req);
 #endif
     for (int i = 0; i < num_pins; i++) {
-        pins[i].should_stop = true;
+        pins[i]._should_stop = true;
     }
     for (int i = 0; i < num_pins; i++) {
-        pthread_join(pins[i].handle, NULL);
+        pthread_join(pins[i]._handle, NULL);
     }
 }
