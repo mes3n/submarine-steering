@@ -21,6 +21,7 @@ static const char *help_message =
     "  -p PORT            port the program will use for communication\n"
     "  -R HANDSHAKE_RECV  handshake string program expects to recieve\n"
     "  -S HANDSHAKE_SEND  handshake string program will respond with\n"
+    "  -C GPIO_CHIP_DEV   the gpiochip device on which the pins are located\n"
     "  -x STEER_X_PIN     the gpio pin used to control horizontal movement\n"
     "  -y STEER_Y_PIN     the gpio pin used to control vertical movement\n"
     "  -m MOTOR_CTRL_PIN  the gpio pin used to control motor speed\n"
@@ -52,7 +53,7 @@ int main(int argc, char **argv) {
     char opt, *config_file = "/etc/steering.conf";
     struct config_t config;
     reset_config(&config);
-    while ((opt = getopt(argc, argv, "hc:p:R:S:x:y:m:")) != (char)0xff) {
+    while ((opt = getopt(argc, argv, "hc:p:R:S:C:x:y:m:")) != (char)0xff) {
         switch (opt) {
         case 'c':
             config_file = optarg;
@@ -71,6 +72,9 @@ int main(int argc, char **argv) {
                     sizeof(config.handshake_send) - 1);
             config.fields |= 0x1 << FIELD_N_handshake_send;
             break;
+        case 'C':
+            strncpy(config.gpio_chip, optarg, sizeof(config.gpio_chip) - 1);
+            config.fields |= 0x1 << FIELD_N_gpio_chip;
         case 'x':
             sscanf(optarg, "%d", &config.steer_x_pin);
             config.fields |= 0x1 << FIELD_N_steer_x_pin;
@@ -92,7 +96,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (read_from(config_file, &config, true) < 0) {
+    if (load_from(&config, config_file, true) < 0) {
         fprintf(stderr, "Failed to read from config.\n");
         return 1;
     }
@@ -101,6 +105,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "  - port = %d\n", config.port);
     fprintf(stderr, "  - handshake_recv = %s\n", config.handshake_recv);
     fprintf(stderr, "  - handshake_send = %s\n", config.handshake_send);
+    fprintf(stderr, "  - gpio_chip = %s\n", config.gpio_chip);
     fprintf(stderr, "  - steer_x_pin = %d\n", config.steer_x_pin);
     fprintf(stderr, "  - steer_y_pin = %d\n", config.steer_y_pin);
     fprintf(stderr, "  - motor_ctrl_pin = %d\n", config.motor_ctrl_pin);
@@ -116,23 +121,23 @@ int main(int argc, char **argv) {
     gpios.steer_x.min = 500;
     gpios.steer_x.max = 2500;
     gpios.steer_x.new_value = 1500;
-    gpios.steer_x.sensitivity = 100;
+    gpios.steer_x.sensitivity = 50;
 
     gpios.steer_y.pin = config.steer_y_pin;
     gpios.steer_y.pwm = 0;
     gpios.steer_y.min = 500;
     gpios.steer_y.max = 2500;
     gpios.steer_y.new_value = 1500;
-    gpios.steer_y.sensitivity = 100;
+    gpios.steer_y.sensitivity = 50;
 
     gpios.motor_ctrl.pin = config.motor_ctrl_pin;
     gpios.motor_ctrl.pwm = 20000;
     gpios.motor_ctrl.min = 1000;
     gpios.motor_ctrl.max = 2000;
     gpios.motor_ctrl.new_value = 1000;
-    gpios.motor_ctrl.sensitivity = 50;
+    gpios.motor_ctrl.sensitivity = 20;
 
-    if (gpio_start((struct gpio_pin_t *)&gpios, 3) < 0) {
+    if (gpio_start(config.gpio_chip, (struct gpio_pin_t *)&gpios, 3) < 0) {
         fprintf(stderr, "GPIO failed to initialise.\n");
         return 2;
     }

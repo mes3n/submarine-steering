@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #define HANDSHAKE_MAX 16
+#define GPIO_CHIP_MAX 32
 
 #define DEFAULT_port 2300
 #define FIELD_N_port 0
@@ -20,18 +21,23 @@
 #define FORMAT_handshake_send "s"
 #define IS_PTR_handshake_send 1
 
+#define DEFAULT_gpio_chip ""
+#define FIELD_N_gpio_chip 3
+#define FORMAT_gpio_chip "s"
+#define IS_PTR_gpio_chip 1
+
 #define DEFAULT_steer_x_pin 2
-#define FIELD_N_steer_x_pin 3
+#define FIELD_N_steer_x_pin 4
 #define FORMAT_steer_x_pin "d"
 #define IS_PTR_steer_x_pin 0
 
 #define DEFAULT_steer_y_pin 3
-#define FIELD_N_steer_y_pin 4
+#define FIELD_N_steer_y_pin 5
 #define FORMAT_steer_y_pin "d"
 #define IS_PTR_steer_y_pin 0
 
 #define DEFAULT_motor_ctrl_pin 4
-#define FIELD_N_motor_ctrl_pin 5
+#define FIELD_N_motor_ctrl_pin 6
 #define FORMAT_motor_ctrl_pin "d"
 #define IS_PTR_motor_ctrl_pin 0
 
@@ -46,6 +52,8 @@ struct config_t {
     char handshake_recv[HANDSHAKE_MAX];
     char handshake_send[HANDSHAKE_MAX];
 
+    char gpio_chip[GPIO_CHIP_MAX];
+
     int steer_x_pin;
     int steer_y_pin;
     int motor_ctrl_pin;
@@ -59,7 +67,7 @@ struct config_t {
  * @param use_default Load hard coded default values if none other were set
  * @returns Returns an integer 0 for success otherwise negative
  */
-int read_from(char *path, struct config_t *config, bool use_default);
+int load_from(struct config_t *config, const char *path, bool use_default);
 
 /**
  * Reset configuration struct object be zeroing its fields

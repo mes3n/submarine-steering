@@ -36,7 +36,7 @@ struct gpio_pin_t {
  * @param num_pins Number of pins in pins array
  * @return An integer 0 for success otherwise negative
  */
-int gpio_start(struct gpio_pin_t *pins, size_t num_pins);
+int gpio_start(const char *gpio_chip, struct gpio_pin_t *pins, size_t num_pins);
 
 /**
  * Update gpio new_value from a scale where -1.0 => min and +1.0 => max

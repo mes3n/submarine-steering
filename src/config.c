@@ -82,10 +82,11 @@ void remove_comment(char *line) {
 
 void reset_config(struct config_t *config) {
     config->fields = 0x0;
-    __eval__(__map__(__zero_var__, handshake_recv, handshake_send));
+    __eval__(__map__(__zero_var__, handshake_recv, handshake_send, gpio_chip));
 }
 
-int read_from(char *path, struct config_t *config, bool use_default) {
+int load_from(struct config_t *config, const char *path,
+                   bool use_default) {
     FILE *fp;
     if ((fp = fopen(path, "r")) == NULL) {
         return -1;
@@ -97,14 +98,14 @@ int read_from(char *path, struct config_t *config, bool use_default) {
         if (sscanf(buf, " %*s") == EOF)
             continue;
         __eval__(__map__(__set_var__, port, handshake_recv, handshake_send,
-                         steer_x_pin, steer_y_pin, motor_ctrl_pin));
+                         gpio_chip, steer_x_pin, steer_y_pin, motor_ctrl_pin));
     }
 
     fclose(fp);
 
     if (use_default) {
         __eval__(__map__(__default_var__, port, handshake_recv, handshake_send,
-                         steer_x_pin, steer_y_pin, motor_ctrl_pin));
+                         gpio_chip, steer_x_pin, steer_y_pin, motor_ctrl_pin));
     }
 
     return 0;

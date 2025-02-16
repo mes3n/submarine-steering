@@ -10,7 +10,6 @@
 #include <pigpio.h>
 #elif defined(BUILD_LIBGPIOD)
 #include <gpiod.h>
-const char *gpiochip = "/dev/gpiochip1";
 struct gpiod_line_request *line_req = NULL;
 #endif
 
@@ -26,7 +25,7 @@ void *set_gpio_val(struct gpio_pin_t *pin) {
             pin->_current_value = new;
             fprintf(stderr, "GPIO thread %d: new value %d.\n", pin->pin, new);
         } else if (pin->pwm == 0) {
-            usleep(1000);
+            usleep(pin->max);
             continue;
         }
 #ifdef BUILD_PIGPIO
@@ -41,13 +40,14 @@ void *set_gpio_val(struct gpio_pin_t *pin) {
         usleep(pin->_current_value);
 #endif
         usleep(pin->pwm > pin->_current_value ? pin->pwm - pin->_current_value
-                                              : 0);
+                                              : pin->max);
     }
     fprintf(stderr, "GPIO thread %d: stopped.\n", pin->pin);
     pthread_exit(NULL);
 }
 
-int gpio_start(struct gpio_pin_t *pins, size_t num_pins) {
+int gpio_start(const char *gpio_chip, struct gpio_pin_t *pins,
+               size_t num_pins) {
     int exit_status = 0;
 
 #ifdef BUILD_PIGPIO
@@ -59,9 +59,9 @@ int gpio_start(struct gpio_pin_t *pins, size_t num_pins) {
         return -1;
     }
 #elif defined(BUILD_LIBGPIOD)
-    struct gpiod_chip *chip = gpiod_chip_open(gpiochip);
+    struct gpiod_chip *chip = gpiod_chip_open(gpio_chip);
     if (!chip) {
-        fprintf(stderr, "Failed to open chip at %s.\n", gpiochip);
+        fprintf(stderr, "Failed to open chip at %s.\n", gpio_chip);
         return -1;
     }
 

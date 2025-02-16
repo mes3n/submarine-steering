@@ -8,7 +8,11 @@
 #define RECIEVED_DATA_MAX 128
 
 /**
- * Struct ...
+ * Struct of arguments which should be passed to the server thread function
+ *
+ * `recv_data` is a pointer to which the server will read data.
+ * `handshake_recv` is the handshake string the server is expecting to receive.
+ * `handshake_send` is the handshake string the server will send in response.
  */
 struct listen_args_t {
     char *recv_data;
@@ -17,7 +21,9 @@ struct listen_args_t {
 };
 
 /**
- * Struct ...
+ * Struct for managing the server thread
+ *
+ * args should be set and where as per its documentation beforehand.
  */
 struct server_thread_t {
     int socket_fd;
